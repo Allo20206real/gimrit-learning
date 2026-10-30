@@ -494,6 +494,14 @@ button.chip:hover, a.chip:hover { background: var(--surface-2); }
 .switch:disabled { opacity: .4; }
 input[type=range] { accent-color: var(--accent); }
 
+/* Ads */
+.ad-slot { margin: 18px 0; padding: 8px; border-radius: 14px; background: var(--surface); border: 2px dashed var(--border); text-align: center; overflow: hidden; }
+.ad-label { display: block; font-size: .68rem; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 4px; }
+.ad-body { min-height: 50px; }
+.rail .ad-slot { margin: 0; }
+.rail > * { flex: none; }
+.results .ad-slot { width: min(620px, 100%); }
+
 /* ==========================================================================
    Responsive
    ========================================================================== */

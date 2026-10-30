@@ -1,0 +1,15 @@
+# One-click setup for Render (https://render.com): New → Blueprint → pick this repo.
+services:
+  - type: web
+    name: gimrit
+    runtime: node
+    plan: free
+    branch: build/gimrit-app
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL # Postgres connection string, e.g. from neon.tech
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: https://allo20206real.github.io

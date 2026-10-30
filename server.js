@@ -1,5 +1,5 @@
 // Gimrit server: serves the web app and a small JSON API for accounts, sync, friends and leaderboards.
-// Zero dependencies — run with `node server.js`.
+// Run with `node server.js`. Data is kept in data/db.json, or in Postgres when DATABASE_URL is set.
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -8,6 +8,9 @@ const crypto = require('crypto');
 const PORT = Number(process.env.PORT) || 3000;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
+const DATABASE_URL = process.env.DATABASE_URL;
+// Sites allowed to call the API from a browser, comma separated ('*' = any)
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '*').split(',').map((o) => o.trim());
 const PUBLIC = path.join(__dirname, 'public');
 const TOKEN_TTL = 60 * 24 * 3600 * 1000;
 const MAX_BODY = 512 * 1024;
@@ -16,30 +19,64 @@ const MAX_BODY = 512 * 1024;
 // Storage
 // ---------------------------------------------------------------------------
 let db = { users: {}, tokens: {}, activity: [] };
-try {
-  db = { ...db, ...JSON.parse(fs.readFileSync(DB_FILE, 'utf8')) };
-} catch (e) {
-  if (e.code !== 'ENOENT') { console.error('Could not read database:', e.message); process.exit(1); }
+let pool = null;
+const written = new Map(); // Postgres row key -> last JSON written, so only changed rows are saved
+
+async function loadDb() {
+  if (!DATABASE_URL) {
+    try {
+      db = { ...db, ...JSON.parse(fs.readFileSync(DB_FILE, 'utf8')) };
+    } catch (e) {
+      if (e.code !== 'ENOENT') throw new Error('Could not read database: ' + e.message);
+    }
+    return;
+  }
+  const { Pool } = require('pg');
+  pool = new Pool({ connectionString: DATABASE_URL, max: 3 });
+  await pool.query('CREATE TABLE IF NOT EXISTS gimrit_kv (k text PRIMARY KEY, v jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())');
+  const { rows } = await pool.query('SELECT k, v FROM gimrit_kv');
+  for (const r of rows) {
+    if (r.k === 'tokens') db.tokens = r.v;
+    else if (r.k === 'activity') db.activity = r.v;
+    else if (r.k.startsWith('user:')) db.users[r.k.slice(5)] = r.v;
+    written.set(r.k, JSON.stringify(r.v));
+  }
+}
+
+function writeFile() {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const tmp = DB_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(db));
+  fs.renameSync(tmp, DB_FILE);
+}
+
+async function writePostgres() {
+  const rows = [['tokens', db.tokens], ['activity', db.activity], ...Object.values(db.users).map((u) => ['user:' + u.key, u])];
+  for (const [k, v] of rows) {
+    const json = JSON.stringify(v);
+    if (written.get(k) === json) continue;
+    await pool.query('INSERT INTO gimrit_kv (k, v) VALUES ($1, $2) ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v, updated_at = now()', [k, json]);
+    written.set(k, json);
+  }
 }
 
 let saveTimer = null;
+let saving = Promise.resolve();
+function save() {
+  saveTimer = null;
+  saving = saving.then(() => (pool ? writePostgres() : writeFile())).catch((e) => console.error('Save failed:', e.message));
+  return saving;
+}
 function persist() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    const tmp = DB_FILE + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(db));
-    fs.renameSync(tmp, DB_FILE);
-  }, 250);
+  saveTimer = setTimeout(save, pool ? 1000 : 250);
 }
-function flush() {
-  if (!saveTimer) return;
-  clearTimeout(saveTimer);
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(DB_FILE, JSON.stringify(db));
+async function shutdown() {
+  if (saveTimer) { clearTimeout(saveTimer); await save(); } else await saving;
+  process.exit(0);
 }
-process.on('SIGINT', () => { flush(); process.exit(0); });
-process.on('SIGTERM', () => { flush(); process.exit(0); });
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -112,6 +149,21 @@ class HttpError extends Error {
   constructor(status, msg) { super(msg); this.status = status; }
 }
 
+function cors(req, res) {
+  const origin = req.headers.origin;
+  if (!origin) return;
+  if (ALLOWED_ORIGINS.includes('*') || ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Max-Age', '86400');
+  }
+}
+
+// Hosts like Render sit behind a proxy, so the visitor's address is in X-Forwarded-For
+const clientIp = (req) => (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress;
+
 function send(res, status, data) {
   const body = JSON.stringify(data);
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -169,7 +221,7 @@ const on = (method, pattern, fn) => routes.push({ method, re: new RegExp(`^${pat
 on('GET', '/api/health', () => ({ ok: true }));
 
 on('POST', '/api/signup', async (req) => {
-  if (limited(req.socket.remoteAddress)) throw new HttpError(429, 'Too many attempts — try again later');
+  if (limited(clientIp(req))) throw new HttpError(429, 'Too many attempts — try again later');
   const b = await readBody(req);
   const username = clean(b.username, 20);
   if (!/^[A-Za-z0-9_]{3,20}$/.test(username)) throw new HttpError(400, 'Username must be 3–20 letters, numbers or _');
@@ -190,7 +242,7 @@ on('POST', '/api/signup', async (req) => {
 });
 
 on('POST', '/api/login', async (req) => {
-  if (limited(req.socket.remoteAddress)) throw new HttpError(429, 'Too many attempts — try again later');
+  if (limited(clientIp(req))) throw new HttpError(429, 'Too many attempts — try again later');
   const b = await readBody(req);
   const u = db.users[key(clean(b.username, 20))];
   if (!u || typeof b.password !== 'string' || !checkPassword(b.password, u.pass)) throw new HttpError(401, 'Wrong username or password');
@@ -343,7 +395,7 @@ on('POST', '/api/activity', async (req) => {
   const type = clean(b.type, 20), text = clean(b.text, 140);
   if (!type || !text) throw new HttpError(400, 'Missing activity');
   db.activity.unshift({ id: id(), u: u.key, type, text, at: now(), cheers: [] });
-  db.activity = db.activity.slice(0, 5000);
+  db.activity = db.activity.slice(0, 2000);
   persist();
   return { ok: true };
 });
@@ -418,6 +470,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
     return serveStatic(req, res, url);
   }
+  cors(req, res);
+  if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   try {
     for (const r of routes) {
       const m = r.method === req.method && r.re.exec(url.pathname);
@@ -431,6 +485,8 @@ const server = http.createServer(async (req, res) => {
 });
 
 if (require.main === module) {
-  server.listen(PORT, () => console.log(`Gimrit running at http://localhost:${PORT}`));
+  loadDb().then(() => {
+    server.listen(PORT, () => console.log(`Gimrit running at http://localhost:${PORT} (${pool ? 'Postgres' : 'file'} storage)`));
+  }).catch((e) => { console.error(e.message); process.exit(1); });
 }
 module.exports = { server, isoWeek };

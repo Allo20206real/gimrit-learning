@@ -1,12 +1,16 @@
 import { state, summary, onChange, replaceState } from './store.js';
+import { API_URL } from './config.js';
+
+const BASE = API_URL.replace(/\/+$/, '') + '/api';
 
 const TOKEN_KEY = 'gimrit:token';
-export const session = { token: null, user: null, online: false, notifications: [], unread: 0, incoming: 0 };
+export const session = { token: null, user: null, online: false, connecting: true, remote: !!API_URL, notifications: [], unread: 0, incoming: 0 };
 try { session.token = localStorage.getItem(TOKEN_KEY); } catch { /* ignore */ }
 
-async function req(method, path, body) {
-  const res = await fetch('/api' + path, {
+async function req(method, path, body, timeout = 20000) {
+  const res = await fetch(BASE + path, {
     method,
+    signal: AbortSignal.timeout(timeout),
     headers: { 'Content-Type': 'application/json', ...(session.token ? { Authorization: 'Bearer ' + session.token } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -32,11 +36,14 @@ export const api = {
 
 export async function init() {
   try {
-    await req('GET', '/health');
+    // A free-tier server may be asleep; waking it can take close to a minute
+    await req('GET', '/health', null, API_URL ? 90000 : 5000);
     session.online = true;
   } catch {
     session.online = false;
     return;
+  } finally {
+    session.connecting = false;
   }
   if (session.token) {
     try {

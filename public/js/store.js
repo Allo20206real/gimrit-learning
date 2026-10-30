@@ -24,7 +24,7 @@ const fresh = () => ({
   lang: 'es',
   courses: {},
   xp: 0,
-  gems: 500,
+  gems: 100,
   hearts: MAX_HEARTS,
   heartsAt: Date.now(),
   streak: { count: 0, last: null, longest: 0, freezes: 1, frozen: [] },

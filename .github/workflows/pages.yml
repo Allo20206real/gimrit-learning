@@ -20,9 +20,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Publish public/ to gh-pages
+        env:
+          API_URL: ${{ vars.GIMRIT_API_URL }}
         run: |
           cd public
           touch .nojekyll
+          # Point the site at the Gimrit server (repo Settings → Secrets and variables → Actions → Variables)
+          if [ -n "$API_URL" ]; then
+            printf "export const API_URL = '%s';\n" "$API_URL" > js/config.js
+          fi
           git init -q -b gh-pages
           git config user.name "github-actions[bot]"
           git config user.email "41898699+github-actions[bot]@users.noreply.github.com"

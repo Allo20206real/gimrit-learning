@@ -5,12 +5,21 @@
 ## Run it
 
 ```bash
+npm install
 npm start            # http://localhost:3000
 ```
 
-Needs Node 18+ and has **no dependencies**. `server.js` serves the app and a small JSON API. Accounts and progress are stored in `data/db.json`. You can change this with `PORT` and `DATA_DIR`.
+Needs Node 18+. `server.js` serves the app and a small JSON API. By default it stores data in `data/db.json`. If `DATABASE_URL` is set, it stores data in Postgres instead. Other settings: `PORT`, `DATA_DIR`, and `ALLOWED_ORIGINS` (the sites allowed to call the API, comma separated).
 
-The live site at https://allo20206real.github.io/gimrit-learning/ is published by `.github/workflows/pages.yml`, which copies `public/` to the `gh-pages` branch on every push. You can also host just the `public/` folder on any static host. In that case lessons, practice, streaks, quests and the shop all work offline from `localStorage`. Friends, leaderboards and cloud sync need the server.
+## Hosting
+
+- **Website:** `.github/workflows/pages.yml` copies `public/` to the `gh-pages` branch on every push, and GitHub Pages serves it at https://allo20206real.github.io/gimrit-learning/.
+- **Server:** `render.yaml` sets up the server on Render's free plan. Set `DATABASE_URL` to a Postgres database, such as a free one from neon.tech.
+- **Connecting the two:** add a repository variable `GIMRIT_API_URL` with the server address (Settings → Secrets and variables → Actions → Variables), then re-run the "Deploy site" workflow. Without this, the site still works but without accounts, friends or leaderboards.
+
+## Ads
+
+All ad spots are set in `public/js/ads.js`. Paste an AdSense ad-unit ID, or another network's HTML snippet, into any spot. Spots left empty show nothing. Ads never appear inside lessons.
 
 ## Features
 
@@ -25,7 +34,7 @@ The live site at https://allo20206real.github.io/gimrit-learning/ is published b
 - Streaks, plus streak freezes that are used automatically. You get a streak celebration screen, a week view and a 5-week calendar.
 - XP, levels, a daily XP goal, combos and a 2× XP boost.
 - Hearts: you lose one per mistake in lessons. They refill over time, and practice earns them back.
-- Gems, earned from lessons, chests, quests and achievements. Spend them in the shop on streak freezes, heart refills, XP boosts, themes and premium avatars.
+- Gems (everyone starts with 100), earned from lessons, chests, quests and achievements. Spend them in the shop on streak freezes, heart refills, XP boosts, themes and premium avatars.
 - Three daily quests, a daily bonus chest, and 21 achievements.
 
 **Social** (requires the server)
@@ -50,6 +59,8 @@ public/js/store.js   Game state: streaks, hearts, XP, quests, achievements, SRS
 public/js/lesson.js  Exercise generators + lesson runner
 public/js/views.js   Pages and router
 public/js/api.js     Server sync and social API client
+public/js/config.js  Server address used by the hosted site
+public/js/ads.js     Ad spots — paste ad codes here
 ```
 
 To add content, edit `public/js/data.js`. Each word and sentence lists translations in the order `es|fr|de|it|pt`.

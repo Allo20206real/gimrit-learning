@@ -9,6 +9,7 @@ import { buildLesson, buildPractice, runSession, practiceAvailable } from './les
 import { say, sfx, canSpeak, canListen } from './audio.js';
 import { session, api, signup, login, logout, postActivity, pollNotifications, onNotifications } from './api.js';
 import { $, $$, esc, shuffle, sample, fmt, toast, modal, confetti, mascot, avatar, ring, timeAgo } from './ui.js';
+import { adSlot } from './ads.js';
 
 const app = () => $('#app');
 let cleanup = null;
@@ -57,7 +58,7 @@ function shell(active, content, { rail = true } = {}) {
           ${session.user ? `<button class="chip bell" title="Notifications">🔔<span class="badge" ${session.unread ? '' : 'hidden'}>${session.unread}</span></button>` : ''}
         </div>
       </header>
-      <div class="page">${content}</div>
+      <div class="page">${active === 'learn' ? content : adSlot('pageTop') + content + adSlot('pageBottom')}</div>
     </div>
     ${rail ? `<aside class="rail">${railHtml()}</aside>` : ''}
   </div>`;
@@ -81,6 +82,7 @@ function railHtml() {
       <div class="widget-row">${ring(xpToday / goal, 64, 7, xpToday >= goal ? '✓' : `${Math.round((xpToday / goal) * 100)}%`)}
         <div><div class="widget-title">Daily goal</div><div class="muted">${xpToday} / ${goal} XP today</div>${doubleXpActive() ? '<div class="boost-tag">⚡ 2× XP active</div>' : ''}</div></div>
     </div>
+    ${adSlot('sidebarTop')}
     <div class="card widget">
       <div class="widget-title">🔥 ${state.streak.count} day streak</div>
       <div class="week">${days}</div>
@@ -91,6 +93,7 @@ function railHtml() {
       ${qs.map((q) => `<div class="mini-quest"><span>${q.icon}</span><div class="grow"><div class="small">${esc(q.text)}</div>${bar(q.progress / q.target)}</div></div>`).join('')}
     </div>
     ${session.user || !session.online ? '' : `<div class="card widget promo"><div class="widget-title">Learn with friends</div><p class="muted small">Create a free profile to add friends, compete on leaderboards and sync your progress.</p><a class="btn primary sm" href="#/account">Create a profile</a></div>`}
+    ${adSlot('sidebarBottom')}
     <div class="rail-foot muted small">Gimrit · Learn languages your way</div>`;
 }
 
@@ -153,7 +156,9 @@ onNotifications(() => {
 // ---------------------------------------------------------------------------
 // Onboarding
 // ---------------------------------------------------------------------------
+let obStep = 0;
 function onboarding(step = 0) {
+  obStep = step;
   const o = state.onboardingDraft || (state.onboardingDraft = { lang: null, goal: 20, name: '', avatar: AVATARS[0], color: COLORS[0] });
   let body = '';
   if (step === 0) {
@@ -236,11 +241,12 @@ function learn() {
         <button class="btn on-color" data-guide="${ui}">📒 Guidebook</button>
       </div>
       <div class="path">${nodes.join('')}<div class="path-mascot" style="--side:${ui % 2 ? -1 : 1}">${mascot(ui % 2 ? 'wow' : 'happy', 110)}</div></div>
-    </section>`;
+    </section>${ui < UNITS.length - 1 ? adSlot('betweenUnits') : ''}`;
   }).join('');
   const pct = Math.round(courseProgress() * 100);
   shell('learn', `<div class="learn">
     <div class="course-head card"><span class="flag-xl">${LANGS[state.lang].flag}</span><div class="grow"><b>${LANGS[state.lang].name} course</b><div class="muted small">${pct}% complete · ${learnedWords().length} words learned</div>${bar(pct / 100)}</div></div>
+    ${adSlot('pathTop')}
     ${units}
     <div class="course-end card center">${mascot('cheer', 90)}<h3>More units coming soon!</h3><p class="muted">Finished everything? Keep your skills sharp in Practice and Stories.</p></div>
   </div>`);
@@ -375,6 +381,7 @@ async function results(r, res, back, gainedHeart = false) {
     </div>
     <div class="reward-row"><span class="chip">💎 +${res.gems} gems</span>${gainedHeart ? '<span class="chip">❤️ +1 heart</span>' : ''}${res.goalJustMet ? '<span class="chip">🏁 Daily goal reached!</span>' : ''}</div>
     <button class="btn primary lg continue">Continue</button>
+    ${adSlot('results')}
   </div>`;
   if (res.goalJustMet) postActivity('goal', `hit their daily goal of ${state.settings.goal} XP 🏁`);
   const cont = $('.continue');
@@ -619,10 +626,17 @@ function story(id) {
 // ---------------------------------------------------------------------------
 function needAccount(active, title, blurb) {
   const offline = !session.online;
+  const heading = session.connecting ? 'Connecting to Gimrit…'
+    : !offline ? 'Create a profile to unlock this'
+      : session.remote ? 'Can’t reach Gimrit right now' : 'Friends & leaderboards are coming soon';
+  const text = session.connecting ? 'Waking up the server — this can take up to a minute the first time. This page will update by itself.'
+    : !offline ? esc(blurb)
+      : session.remote ? 'The Gimrit server didn’t answer. Check your connection and reload the page in a minute. Your lessons keep working and are saved in this browser.'
+        : 'This version of Gimrit doesn’t have friends and leaderboards switched on yet. Everything else — lessons, practice, stories, streaks, quests and the shop — works right now, and your progress is saved in this browser.';
   shell(active, `<div class="page-head"><h1>${title}</h1></div>
     <div class="card pad center social-gate">${mascot('wow', 120)}
-      <h2>${offline ? 'Friends & leaderboards are coming soon' : 'Create a profile to unlock this'}</h2>
-      <p class="muted">${offline ? 'This version of Gimrit doesn’t have friends and leaderboards switched on yet. Everything else — lessons, practice, stories, streaks, quests and the shop — works right now, and your progress is saved in this browser.' : esc(blurb)}</p>
+      <h2>${heading}</h2>
+      <p class="muted">${text}</p>
       ${offline ? '' : '<div class="stack narrow"><a class="btn primary" href="#/account">Create a profile</a><a class="btn" href="#/account?mode=login">Log in</a></div>'}
     </div>`);
 }
@@ -1042,4 +1056,13 @@ export function startupNotices() {
   clearStreakNotice();
   if (n.type === 'frozen') toast(`Streak Freeze saved your streak! (${n.days} day${n.days > 1 ? 's' : ''})`, '🧊');
   else if (n.count > 1) modal(`<div class="center">${mascot('sad', 110)}<h2>Your ${n.count} day streak ended</h2><p class="muted">It happens to everyone. Start a new one today — and grab a Streak Freeze in the shop to protect it next time.</p><a class="btn primary" href="#/learn" data-value="ok">Start a new streak</a></div>`);
+}
+
+// Called once we know whether the server is reachable: refresh screens that depend on it,
+// without interrupting a lesson or an onboarding flow in progress.
+export function refreshAfterConnect() {
+  const h = location.hash;
+  if (!state.onboarded && !h.startsWith('#/account')) { if (obStep === 0) onboarding(0); return; }
+  if (/^#\/(lesson|practice\/|story\/|flashcards|speed)/.test(h)) return;
+  route();
 }

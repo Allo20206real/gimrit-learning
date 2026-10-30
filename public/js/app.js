@@ -1,8 +1,10 @@
 import { state, tick, save } from './store.js';
 import { init } from './api.js';
-import { route, applyTheme, startupNotices } from './views.js';
+import { watchAds } from './ads.js';
+import { route, applyTheme, startupNotices, refreshAfterConnect } from './views.js';
 
 applyTheme();
+watchAds();
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
 window.addEventListener('hashchange', route);
 
@@ -16,7 +18,6 @@ setInterval(() => {
 route();
 init().then(() => {
   applyTheme();
-  // re-render once we know whether the server / profile is available
-  if (!location.hash.startsWith('#/lesson') && !location.hash.startsWith('#/practice/') && !location.hash.startsWith('#/story')) route();
+  refreshAfterConnect();
   startupNotices();
 });
