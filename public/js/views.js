@@ -90,7 +90,7 @@ function railHtml() {
       <div class="widget-head"><span class="widget-title">Daily quests</span><a href="#/quests" class="link">View all</a></div>
       ${qs.map((q) => `<div class="mini-quest"><span>${q.icon}</span><div class="grow"><div class="small">${esc(q.text)}</div>${bar(q.progress / q.target)}</div></div>`).join('')}
     </div>
-    ${session.user ? '' : `<div class="card widget promo"><div class="widget-title">Learn with friends</div><p class="muted small">Create a free profile to add friends, compete on leaderboards and sync your progress.</p><a class="btn primary sm" href="#/account">Create a profile</a></div>`}
+    ${session.user || !session.online ? '' : `<div class="card widget promo"><div class="widget-title">Learn with friends</div><p class="muted small">Create a free profile to add friends, compete on leaderboards and sync your progress.</p><a class="btn primary sm" href="#/account">Create a profile</a></div>`}
     <div class="rail-foot muted small">Gimrit · Learn languages your way</div>`;
 }
 
@@ -621,8 +621,8 @@ function needAccount(active, title, blurb) {
   const offline = !session.online;
   shell(active, `<div class="page-head"><h1>${title}</h1></div>
     <div class="card pad center social-gate">${mascot('wow', 120)}
-      <h2>${offline ? 'Social features are offline' : 'Create a profile to unlock this'}</h2>
-      <p class="muted">${offline ? 'Gimrit couldn’t reach its server. Start the app with <code>npm start</code> to enable friends, leaderboards and sync. Your lessons keep working offline.' : esc(blurb)}</p>
+      <h2>${offline ? 'Friends & leaderboards are coming soon' : 'Create a profile to unlock this'}</h2>
+      <p class="muted">${offline ? 'This version of Gimrit doesn’t have friends and leaderboards switched on yet. Everything else — lessons, practice, stories, streaks, quests and the shop — works right now, and your progress is saved in this browser.' : esc(blurb)}</p>
       ${offline ? '' : '<div class="stack narrow"><a class="btn primary" href="#/account">Create a profile</a><a class="btn" href="#/account?mode=login">Log in</a></div>'}
     </div>`);
 }

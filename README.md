@@ -10,7 +10,7 @@ npm start            # http://localhost:3000
 
 Needs Node 18+ and has **no dependencies**. `server.js` serves the app and a small JSON API. Accounts and progress are stored in `data/db.json`. You can change this with `PORT` and `DATA_DIR`.
 
-You can also host just the `public/` folder on any static host. In that case lessons, practice, streaks, quests and the shop all work offline from `localStorage`. Friends, leaderboards and cloud sync need the server.
+The live site at https://allo20206real.github.io/gimrit-learning/ is published by `.github/workflows/pages.yml`, which copies `public/` to the `gh-pages` branch on every push. You can also host just the `public/` folder on any static host. In that case lessons, practice, streaks, quests and the shop all work offline from `localStorage`. Friends, leaderboards and cloud sync need the server.
 
 ## Features
 
