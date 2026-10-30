@@ -1,0 +1,13 @@
+{
+  "name": "gimrit",
+  "version": "1.0.0",
+  "description": "Gimrit — learn languages the fun way.",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": { "node": ">=18" },
+  "license": "UNLICENSED"
+}
